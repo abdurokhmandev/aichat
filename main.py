@@ -560,6 +560,29 @@ def build_application(config: dict):
     return app
 
 
+async def start_one_bot(app):
+    """Bitta botni xavfsiz ishga tushirish"""
+    await app.initialize()
+    # Avval eski sessiyani butunlay o'chirish
+    for attempt in range(3):
+        try:
+            await app.bot.delete_webhook(drop_pending_updates=True)
+            await asyncio.sleep(2)
+            # offset=-1 bilan eski getUpdates loop ni to'xtatish
+            await app.bot.get_updates(offset=-1, timeout=2)
+            break
+        except Exception as e:
+            logger.warning(f"Session tozalash urinish {attempt+1}: {e}")
+            await asyncio.sleep(3)
+    await asyncio.sleep(2)
+    await app.start()
+    await app.updater.start_polling(
+        drop_pending_updates=True,
+        allowed_updates=["message", "callback_query", "message_reaction"],
+    )
+    logger.info(f"✅ Bot ishga tushdi: {app.bot.username}")
+
+
 async def run_all():
     if not GROQ_API_KEY:
         logger.error("❌ GROQ_API_KEY topilmadi!")
@@ -571,30 +594,26 @@ async def run_all():
 
     apps = [build_application(cfg) for cfg in active_configs]
 
-    for app in apps:
-        await app.initialize()
-        try:
-            await app.bot.delete_webhook(drop_pending_updates=True)
-            await app.bot.get_updates(offset=-1, timeout=1)
-        except Exception as e:
-            logger.warning(f"Session tozalash (normal): {e}")
-        await asyncio.sleep(1)
-        await app.start()
-        await app.updater.start_polling(
-            drop_pending_updates=True,
-            allowed_updates=["message", "callback_query", "message_reaction"],
-        )
+    # Botlarni ketma-ket ishga tushirish — har biri orasida 3 soniya
+    for i, app in enumerate(apps):
+        await start_one_bot(app)
+        if i < len(apps) - 1:
+            await asyncio.sleep(3)
 
-    logger.info(f"✅ {len(apps)} ta bot ishga tushdi.")
+    logger.info(f"✅ Jami {len(apps)} ta bot ishga tushdi.")
     try:
         await asyncio.Event().wait()
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:
+        logger.info("Botlar to'xtatilmoqda...")
         for app in apps:
-            await app.updater.stop()
-            await app.stop()
-            await app.shutdown()
+            try:
+                await app.updater.stop()
+                await app.stop()
+                await app.shutdown()
+            except Exception as e:
+                logger.error(f"To'xtatishda xato: {e}")
 
 
 if __name__ == "__main__":
