@@ -457,10 +457,6 @@ async def run_all():
         await app.updater.start_polling(
             drop_pending_updates=True,
             allowed_updates=["message", "callback_query"],
-            read_timeout=10,
-            write_timeout=10,
-            connect_timeout=10,
-            pool_timeout=10,
         )
     logger.info(f"✅ {len(apps)} ta bot muvaffaqiyatli ishga tushdi.")
     try:
